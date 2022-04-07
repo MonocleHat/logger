@@ -52,10 +52,10 @@ void SetLogLevel(LOG_LEVEL level)
 
 void Log(LOG_LEVEL level, const char *prog, const char *func, int line, const char *message)
 {
-    cout << "severity::" << severity << " level::" << level << endl;
+    
     if (level == severity){
     pthread_mutex_lock(&logLock);
-    cout << "LEVELALIGNED" << endl;
+  
     char BUF[BUFLEN];
     int len;
     time_t now = time(0);
@@ -66,8 +66,6 @@ void Log(LOG_LEVEL level, const char *prog, const char *func, int line, const ch
     BUF[BUFLEN - 1] = '\0';
     sendto(sockfd, BUF, len, 0, (struct sockaddr *)&listener, sizeof(listener));
     pthread_mutex_unlock(&logLock);
-    }else{
-        cout << "Wrong severity!::" << severity << "::" << level << endl;
     }
 
 }
@@ -92,7 +90,7 @@ void *recv_func(void *arg)
     {
         pthread_mutex_lock(&logLock);
         recvfrom(servSock,BUF,BUFLEN,0,(struct sockaddr*)&listener,&listener_len)-1;
-            cout << "RECIEVED:: " << BUF << endl;
+          
             std::string newBuf(BUF);
             string found;
             std::string::size_type sz;

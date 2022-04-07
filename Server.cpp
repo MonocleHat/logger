@@ -29,7 +29,7 @@ void shutdownHandler(int sig)
     switch (sig)
     {
     case SIGINT:
-        cout << "sighandl" << endl;
+        
         is_running = false;
         break;
     }
@@ -81,7 +81,8 @@ int main()
                     cout << "Enter new log level (0-3):";
                     cin >> loglvl;
                     if(loglvl > 3 || loglvl < 0){
-                        cout << "INVALID" << endl;
+                        cout << "INVALID SELECTION! returning to menu" << endl;
+                        sleep(2);
                     }else{
                         pthread_mutex_lock(&lockserv);
                         //cout << "INLOG" << endl;
@@ -106,7 +107,6 @@ int main()
                 break;
         }
     }
-    cout << "LEFT" << endl;
     pthread_join(servthread,NULL);
     close(sockfd);
     return 0;
@@ -120,15 +120,13 @@ void fileReader(){
     int readFD = open("serv.log",O_RDONLY);
     int num_read=0;
     pthread_mutex_lock(&lockserv);
-    //lseek(readFD,0,SEEK_SET);
-    cout << "LOCK ACQUIRED" << endl;
     do{
         num_read = read(readFD,BUF,BUFLEN);
         cout << BUF << endl;
     }while(num_read>0);
-    cout << "LOCK LIFTING" << endl;
+  
     pthread_mutex_unlock(&lockserv);
-    //pthread_mutex_unlock(&lockserv);
+ 
     if (close(readFD)==-1){
         perror("close");
     }

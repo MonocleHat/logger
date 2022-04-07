@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <string>
 #include <sys/types.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -11,7 +12,7 @@
 #include "Logger.h"
 using namespace std;
 #define PORT 9999
-#define BUFLEN 1024
+#define BUFLEN 4096
 #define IP "127.0.0.1" // change me
 // Globals
 LOG_LEVEL severity;
@@ -44,11 +45,17 @@ int InitializeLog()
 
 void SetLogLevel(LOG_LEVEL level)
 {
+   
     severity = level;
+    
 }
 
 void Log(LOG_LEVEL level, const char *prog, const char *func, int line, const char *message)
 {
+    cout << "severity::" << severity << " level::" << level << endl;
+    if (level == severity){
+    pthread_mutex_lock(&logLock);
+    cout << "LEVELALIGNED" << endl;
     char BUF[BUFLEN];
     int len;
     time_t now = time(0);
@@ -58,6 +65,11 @@ void Log(LOG_LEVEL level, const char *prog, const char *func, int line, const ch
     len = sprintf(BUF, "%s %s %s:%s:%d %s\n", dt, levelStr[level], prog, func, line, message) + 1;
     BUF[BUFLEN - 1] = '\0';
     sendto(sockfd, BUF, len, 0, (struct sockaddr *)&listener, sizeof(listener));
+    pthread_mutex_unlock(&logLock);
+    }else{
+        cout << "Wrong severity!::" << severity << "::" << level << endl;
+    }
+
 }
 
 void ExitLog()
@@ -74,24 +86,30 @@ void *recv_func(void *arg)
     char BUF[BUFLEN];
     int ret, len;
     int servSock = *(int *)arg;
-    int levelSet;
+    LOG_LEVEL levelSet = DEBUG;
+    int contain=0;
     while (is_running)
     {
-        recvfrom(servSock,BUF,BUFLEN,0,(struct sockaddr*)&listener,&listener_len);
         pthread_mutex_lock(&logLock);
-        if(strncmp("Set Log Level=",BUF,BUFLEN+1)==0){
+        recvfrom(servSock,BUF,BUFLEN,0,(struct sockaddr*)&listener,&listener_len)-1;
+            cout << "RECIEVED:: " << BUF << endl;
             std::string newBuf(BUF);
             string found;
             std::string::size_type sz;
             std::size_t finder = newBuf.find_first_of("0123");
-            
-            while(finder!=std::string::npos){
+            bool findFLAG = false;
+            while(finder!=std::string::npos && !findFLAG){
                 found = newBuf[finder];
-                levelSet = atoi(found.c_str());
-                cout << "DEBUG::LEVEL::" << levelSet << " | found:: " << found << endl;
+                contain = atoi(found.c_str());
+                levelSet = (LOG_LEVEL)contain;
+                SetLogLevel(levelSet);
+                findFLAG = true;
             }
-        }
+            
+        
         pthread_mutex_unlock(&logLock);
+        sleep(1);
     }
     pthread_exit(NULL);
 }
+

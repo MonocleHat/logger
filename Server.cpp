@@ -24,11 +24,12 @@ pthread_mutex_t lockserv;
 pthread_t servthread;
  struct sockaddr_in servaddr;
  socklen_t servlen;
-static void shutdownHandler(int sig)
+void shutdownHandler(int sig)
 {
     switch (sig)
     {
     case SIGINT:
+        cout << "sighandl" << endl;
         is_running = false;
         break;
     }
@@ -44,7 +45,7 @@ int main()
     char BUF[BUFLEN];
     
     memset(&servaddr, 0, sizeof(servaddr));
-
+    signal(SIGINT, shutdownHandler);
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = inet_addr(IP);
     servaddr.sin_port = htons(PORT);
@@ -60,46 +61,42 @@ int main()
     pthread_create(&servthread,NULL,recv_func,&sockfd); //create a thread and pass socket fd to it
 
     //main menu creation
-    int opt = -1;
+    int menuopt = -1;
     int loglvl;
     int len;
     bool logFLAG = false;
     is_running = true;
-    while(is_running){
-        cout << "A2 Server 0.0.4" << endl;
-        cout << "-=-=-=-=-=-=-=-" << endl;
+    while(menuopt!=0 && is_running == true){
+        system("clear");
+        cout << "-=-=-=-=-=-=-=-=-" << endl;
+        cout << "|A2 Server 1.0.2|" << endl;
+        cout << "-=-=-=-=-=-=-=-=-" << endl;
         cout << "1. Set Log Level" << endl;
         cout << "2. Dump Logs" << endl;
-        cout << "3. Quit" << endl;
+        cout << "0. Quit" << endl;
         cout << "Selection: ";
-        cin >> opt;
-        switch (opt){
+        cin >> menuopt;
+        switch (menuopt){
             case 1:
-                while(!logFLAG){
                     cout << "Enter new log level (0-3):";
                     cin >> loglvl;
-                    switch(loglvl){
-                        case 0:
-                        case 1:
-                        case 2:
-                        case 3:
-                            memset(BUF,0,BUFLEN);
-                            len = sprintf(BUF,"Set Log Level=%d",loglvl)+1;
-                            sendto(sockfd,BUF,len,0,(struct sockaddr *)&servaddr,sizeof(servaddr));
-                            
-                            logFLAG = true;
-                            break;
-                        default:
-                            cout << "Invalid Log Selection" << endl;
-                            break;
+                    if(loglvl > 3 || loglvl < 0){
+                        cout << "INVALID" << endl;
+                    }else{
+                        pthread_mutex_lock(&lockserv);
+                        //cout << "INLOG" << endl;
+                        memset(BUF,0,BUFLEN);
+                        len = sprintf(BUF,"Set Log Level=%d", loglvl)+1;
+                        sendto(sockfd,BUF,len,0,(struct sockaddr*)&servaddr,servlen);
+                       // cout << "DEBUG::" << len << " || BUF: " << BUF << endl;
+                        pthread_mutex_unlock(&lockserv);
+                        
                     }
-                }
-                logFLAG = false;
                 break;
             case 2:
                 fileReader();
                 break;
-            case 3:
+            case 0:
                 cout << "exiting menu" << endl;
                 is_running = false;
                 break;
@@ -109,42 +106,56 @@ int main()
                 break;
         }
     }
+    cout << "LEFT" << endl;
     pthread_join(servthread,NULL);
+    close(sockfd);
+    return 0;
 }
 
 void fileReader(){
     char BUF[BUFLEN];
+    char contchck;
 //read from the file provided
 //Open a file in RDWR mode, create if doesnt exist, set rw perms for user/owner
     int readFD = open("serv.log",O_RDONLY);
-    int num_read;
-    //pthread_mutex_lock(&lockserv);
-    while ((num_read = read(readFD,BUF,BUFLEN))>0){
+    int num_read=0;
+    pthread_mutex_lock(&lockserv);
+    //lseek(readFD,0,SEEK_SET);
+    cout << "LOCK ACQUIRED" << endl;
+    do{
+        num_read = read(readFD,BUF,BUFLEN);
         cout << BUF << endl;
-        cout << "bytes read: " << num_read << endl;
-    }
+    }while(num_read>0);
+    cout << "LOCK LIFTING" << endl;
+    pthread_mutex_unlock(&lockserv);
     //pthread_mutex_unlock(&lockserv);
     if (close(readFD)==-1){
         perror("close");
     }
+   		cout<<endl<<"Press any key to continue: ";
+        cin>>contchck;
 }
 
 void *recv_func(void *arg){
-    int writeFD = open("serv.log",O_RDWR|O_CREAT,S_IRUSR|S_IWUSR);
+    mode_t filePerms = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+    int writeFD = open("serv.log",O_CREAT | O_WRONLY | O_TRUNC ,filePerms);
     int numtowrite;
     char BUF[BUFLEN];
     int ret, len;
-    int servSock = *(int *) arg;
+    int *servSock = (int *) arg;
    
     while(is_running){
+
         pthread_mutex_lock(&lockserv);
-        numtowrite = recvfrom(servSock,BUF,BUFLEN,0,(struct sockaddr*)&servaddr,&servlen);
-        //write the contents of BUF to the file
-        if(write(writeFD,BUF,numtowrite)!=numtowrite){
-            perror("Incomplete Write");
+        len = recvfrom(*servSock, BUF,BUFLEN,0,(struct sockaddr*)&servaddr,&servlen)-1;
+        if(len<0){
+            pthread_mutex_unlock(&lockserv);
+            sleep(1);
+        }else{
+            write(writeFD,BUF,len);
+            pthread_mutex_unlock(&lockserv);
         }
-        pthread_mutex_unlock(&lockserv);
-        sleep(1);
     }
+    cout << "exiting thread" << endl;
     pthread_exit(NULL);
 }
